@@ -1,0 +1,36 @@
+name: YouTube Views Tracker
+
+on:
+  schedule:
+    # Chạy tự động vào 00:00 UTC hàng ngày (tức 7:00 sáng Việt Nam)
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Cho phép bấm nút chạy thủ công để test ngay lập tức
+
+jobs:
+  run_analytics:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Tải code về máy ảo
+        uses: actions/checkout@v3
+
+      - name: 2. Cài đặt Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 3. Cài đặt thư viện
+        run: pip install -r requirements.txt
+
+      - name: 4. Chạy Tool
+        env:
+          # Lấy chìa khóa từ Secret và đưa vào biến môi trường tên API_KEY
+          API_KEY: ${{ secrets.YOUTUBE_API_KEY }} 
+        run: python youtube_tool.py
+
+      - name: 5. Lưu kết quả
+        uses: actions/upload-artifact@v3
+        with:
+          name: youtube-report-csv
+          path: *.csv
+          retention-days: 5 # File sẽ được lưu trong 5 ngày rồi tự xóa để dọn dẹp
