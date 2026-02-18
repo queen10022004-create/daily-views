@@ -31,6 +31,8 @@ jobs:
 
       - name: 4. Run Python Script
         env:
+        # Thêm dòng này vào (đây là cái code Python hiện tại của bạn đang cần)
+          API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python youtube_tool.py
 
