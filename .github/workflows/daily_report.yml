@@ -2,50 +2,61 @@ name: YouTube Views Tracker Daily
 
 on:
   schedule:
-    # Chạy tự động vào 00:00 UTC (tức 7:00 sáng Việt Nam) mỗi ngày
-    - cron: '0 0 * * *'
-  workflow_dispatch: # Cho phép bấm chạy thủ công
+    - cron: '0 0 * * *' # Chạy 7h sáng hằng ngày
+  workflow_dispatch:
 
-# CẤP QUYỀN QUAN TRỌNG: Cho phép Bot ghi đè file lên kho chứa
 permissions:
   contents: write
 
 jobs:
-  run_analytics_and_save:
+  run_analytics_and_email:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Checkout Code
+      - name: Checkout Code
         uses: actions/checkout@v3
         with:
-          # Đảm bảo pull toàn bộ lịch sử git để commit đè lên không bị lỗi
           fetch-depth: 0 
 
-      - name: 2. Setup Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: 3. Install Dependencies
-        run: pip install google-api-python-client pandas
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
-      - name: 4. Run Python Script
+      - name: Run Python Script
         env:
-        # Thêm dòng này vào (đây là cái code Python hiện tại của bạn đang cần)
           API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python youtube_tool.py
 
-      - name: 5. Commit & Push Data back to GitHub
+      - name: Commit & Push Data back to GitHub
         run: |
-          # Cấu hình danh tính cho Bot
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Thêm file CSV vào git
           git add *.csv
-          
-          # Commit thay đổi (Nếu không có thay đổi thì bỏ qua để tránh báo lỗi)
-          git commit -m "📊 Auto-update YouTube stats [skip ci]" || echo "Không có dữ liệu mới để commit"
-          
-          # Đẩy file lên kho chứa
+          git commit -m "📊 Auto-update stats [skip ci]" || echo "No changes to commit"
           git push origin main
+
+      # --- PHẦN MỚI: GỬI EMAIL ---
+      - name: Send mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: 📊 Báo cáo YouTube Hàng Ngày
+          body: |
+            Chào bạn,
+            
+            Đây là báo cáo thống kê lượt xem kênh YouTube của bạn ngày hôm nay.
+            File chi tiết được đính kèm bên dưới.
+            
+            Trân trọng,
+            GitHub Bot
+          to: ${{ secrets.MAIL_USERNAME }} # Gửi cho chính mình
+          from: YouTube Tracker Bot
+          attachments: history_*.csv # Tự động tìm file csv để đính kèm
