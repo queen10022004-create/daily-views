@@ -31,7 +31,22 @@ jobs:
           API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python youtube_tool.py
+      - name: 5. Debug & Commit
+        run: |
+          # --- LỆNH KIỂM TRA MỚI ---
+          echo "📂 Đang liệt kê các file trong thư mục hiện tại:"
+          ls -R
+          # -------------------------
 
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Thử add file, nếu không có file thì không báo lỗi đỏ lòm nữa mà chỉ báo warning
+          git add *.csv || echo "⚠️ Cảnh báo: Không tìm thấy file CSV nào để add!"
+          
+          # Chỉ commit nếu có sự thay đổi
+          git diff --staged --quiet || git commit -m "📊 Auto-update stats [skip ci]"
+          git push origin main
       - name: Commit & Push Data back to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
