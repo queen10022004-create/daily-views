@@ -1,36 +1,50 @@
-name: YouTube Views Tracker
+name: YouTube Views Tracker Daily
 
 on:
   schedule:
-    # Chạy tự động vào 00:00 UTC hàng ngày (tức 7:00 sáng Việt Nam)
+    # Chạy tự động vào 00:00 UTC (tức 7:00 sáng Việt Nam) mỗi ngày
     - cron: '0 0 * * *'
-  workflow_dispatch: # Cho phép bấm nút chạy thủ công để test ngay lập tức
+  workflow_dispatch: # Cho phép bấm chạy thủ công
+
+# CẤP QUYỀN QUAN TRỌNG: Cho phép Bot ghi đè file lên kho chứa
+permissions:
+  contents: write
 
 jobs:
-  run_analytics:
+  run_analytics_and_save:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 1. Tải code về máy ảo
+      - name: 1. Checkout Code
         uses: actions/checkout@v3
+        with:
+          # Đảm bảo pull toàn bộ lịch sử git để commit đè lên không bị lỗi
+          fetch-depth: 0 
 
-      - name: 2. Cài đặt Python
+      - name: 2. Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: 3. Cài đặt thư viện
-        run: pip install -r requirements.txt
+      - name: 3. Install Dependencies
+        run: pip install google-api-python-client pandas
 
-      - name: 4. Chạy Tool
+      - name: 4. Run Python Script
         env:
-          # Lấy chìa khóa từ Secret và đưa vào biến môi trường tên API_KEY
-          API_KEY: ${{ secrets.YOUTUBE_API_KEY }} 
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python youtube_tool.py
 
-      - name: 5. Lưu kết quả
-        uses: actions/upload-artifact@v3
-        with:
-          name: youtube-report-csv
-          path: *.csv
-          retention-days: 5 # File sẽ được lưu trong 5 ngày rồi tự xóa để dọn dẹp
+      - name: 5. Commit & Push Data back to GitHub
+        run: |
+          # Cấu hình danh tính cho Bot
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Thêm file CSV vào git
+          git add *.csv
+          
+          # Commit thay đổi (Nếu không có thay đổi thì bỏ qua để tránh báo lỗi)
+          git commit -m "📊 Auto-update YouTube stats [skip ci]" || echo "Không có dữ liệu mới để commit"
+          
+          # Đẩy file lên kho chứa
+          git push origin main
