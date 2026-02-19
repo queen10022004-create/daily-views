@@ -128,8 +128,10 @@ if __name__ == "__main__":
         print("❌ LỖI: Chưa tìm thấy YOUTUBE_API_KEY trong biến môi trường.")
         exit(1)
 
-    CHANNEL_HANDLE = '@GoogleDevelopers' # Thay bằng kênh của bạn
+    CHANNEL_HANDLE = '@Stoicether' # Thay bằng kênh của bạn
+    # 👇👇 BẠN THÊM DÒNG NÀY VÀO 👇👇
     CSV_FILENAME = f"history_{CHANNEL_HANDLE.replace('@','')}.csv"
+    # ☝️☝️ DÒNG BỊ THIẾU ☝️☝️
 
     tool = YouTubeAnalyticsTool(API_KEY)
     channel_id = tool.get_channel_id_by_handle(CHANNEL_HANDLE)
@@ -138,4 +140,5 @@ if __name__ == "__main__":
         uploads_id = tool.get_uploads_playlist_id(channel_id)
         if uploads_id:
             data = tool.get_all_videos_stats(uploads_id)
+
             tool.update_history_csv(data, CSV_FILENAME)
