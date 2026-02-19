@@ -73,6 +73,13 @@ class YouTubeAnalyticsTool:
         if os.path.exists(filename):
             print(f"📂 Đang cập nhật vào file lịch sử cũ: {filename}")
             df_hist = pd.read_csv(filename)
+            
+            # --- ĐÂY LÀ ĐOẠN FIX LỖI CHẠY TRÙNG NGÀY ---
+            # Nếu file cũ đã có cột của ngày hôm nay, ta xóa nó đi để ghi đè dữ liệu mới nhất
+            if view_col_today in df_hist.columns:
+                df_hist.drop(columns=[view_col_today], inplace=True)
+            # ------------------------------------------
+
             old_view_cols = [col for col in df_hist.columns if col.startswith('Views_') and '-' in col]
             df_hist_views_only = df_hist[['Video ID'] + old_view_cols]
             df_final = pd.merge(df_today, df_hist_views_only, on='Video ID', how='outer')
@@ -126,3 +133,4 @@ if __name__ == "__main__":
              print("❌ Không tìm thấy playlist Uploads.")
     else:
         print("❌ Không tìm thấy kênh.")
+
