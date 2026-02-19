@@ -73,6 +73,13 @@ class YouTubeAnalyticsTool:
         if os.path.exists(filename):
             print(f"📂 Đang cập nhật vào file lịch sử cũ: {filename}")
             df_hist = pd.read_csv(filename)
+            
+            # --- ĐÂY LÀ ĐOẠN FIX LỖI CHẠY TRÙNG NGÀY ---
+            # Nếu file cũ đã có cột của ngày hôm nay, ta xóa nó đi để ghi đè dữ liệu mới nhất
+            if view_col_today in df_hist.columns:
+                df_hist.drop(columns=[view_col_today], inplace=True)
+            # ------------------------------------------
+
             old_view_cols = [col for col in df_hist.columns if col.startswith('Views_') and '-' in col]
             df_hist_views_only = df_hist[['Video ID'] + old_view_cols]
             df_final = pd.merge(df_today, df_hist_views_only, on='Video ID', how='outer')
@@ -97,7 +104,7 @@ class YouTubeAnalyticsTool:
         print(f"✅ Đã lưu file thành công: {filename}")
 
 if __name__ == "__main__":
-    # Lấy Key từ biến môi trường
+    # 1. Lấy Key
     API_KEY = os.environ.get('API_KEY')
     if not API_KEY:
         API_KEY = os.environ.get('YOUTUBE_API_KEY') 
@@ -106,12 +113,13 @@ if __name__ == "__main__":
         print("❌ LỖI: Không tìm thấy API Key.")
         exit(1)
 
+    # 2. Cấu hình kênh
     CHANNEL_HANDLE = '@stoicether' 
     
-    # --- ĐÂY LÀ DÒNG QUAN TRỌNG ĐÃ ĐƯỢC THÊM VÀO ---
+    # 3. ĐẶT TÊN FILE (QUAN TRỌNG NHẤT - PHẢI NẰM Ở ĐÂY)
     CSV_FILENAME = f"history_{CHANNEL_HANDLE.replace('@','')}.csv"
-    # -----------------------------------------------
-
+    
+    # 4. Chạy tool
     tool = YouTubeAnalyticsTool(API_KEY)
     channel_id = tool.get_channel_id_by_handle(CHANNEL_HANDLE)
 
@@ -119,8 +127,11 @@ if __name__ == "__main__":
         uploads_id = tool.get_uploads_playlist_id(channel_id)
         if uploads_id:
             data = tool.get_all_videos_stats(uploads_id)
+            # Lúc này biến CSV_FILENAME đã được tạo ở bước 3 nên sẽ không lỗi nữa
             tool.update_history_csv(data, CSV_FILENAME)
         else:
              print("❌ Không tìm thấy playlist Uploads.")
     else:
         print("❌ Không tìm thấy kênh.")
+
+
