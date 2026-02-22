@@ -64,47 +64,63 @@ class YouTubeAnalyticsTool:
             print("⚠️ Không có dữ liệu.")
             return
 
+        # 1. Xác định tên cột cho ngày hôm nay
         today_str = datetime.datetime.now().strftime('%Y-%m-%d')
         view_col_today = f'Views_{today_str}'
 
+        # Tạo bảng dữ liệu mới
         df_today = pd.DataFrame(current_data)
         df_today.rename(columns={'Views': view_col_today}, inplace=True)
 
         if os.path.exists(filename):
-            print(f"📂 Đang cập nhật vào file lịch sử cũ: {filename}")
+            print(f"📂 Đang cập nhật vào file: {filename}")
             df_hist = pd.read_csv(filename)
             
-            # --- ĐÂY LÀ ĐOẠN FIX LỖI CHẠY TRÙNG NGÀY ---
-            # Nếu file cũ đã có cột của ngày hôm nay, ta xóa nó đi để ghi đè dữ liệu mới nhất
+            # Xóa cột dữ liệu hôm nay nếu đã tồn tại (để tránh trùng lặp khi chạy lại)
             if view_col_today in df_hist.columns:
                 df_hist.drop(columns=[view_col_today], inplace=True)
-            # ------------------------------------------
 
+            # Lấy danh sách các cột Views cũ
             old_view_cols = [col for col in df_hist.columns if col.startswith('Views_') and '-' in col]
+            
+            # QUAN TRỌNG: Sắp xếp các cột theo ngày tăng dần để tìm đúng ngày liền kề
+            old_view_cols.sort()
+
+            # Chỉ giữ lại Video ID và các cột Views lịch sử để ghép nối
             df_hist_views_only = df_hist[['Video ID'] + old_view_cols]
             df_final = pd.merge(df_today, df_hist_views_only, on='Video ID', how='outer')
             
+            # Tính toán Views_Gained (Hôm nay - Ngày gần nhất)
             if old_view_cols:
-                last_date_col = old_view_cols[-1]
+                last_date_col = old_view_cols[-1] # Lấy cột ngày mới nhất trong quá khứ
+                print(f"📊 Đang tính chênh lệch giữa {view_col_today} và {last_date_col}")
+                
+                # Tính chênh lệch, nếu dữ liệu thiếu thì coi là 0
                 df_final['Views_Gained'] = df_final[view_col_today].fillna(0) - df_final[last_date_col].fillna(0)
             else:
                 df_final['Views_Gained'] = 0
         else:
-            print(f"🆕 Tạo file lịch sử mới: {filename}")
+            print(f"🆕 Tạo file mới: {filename}")
             df_final = df_today
             df_final['Views_Gained'] = 0
 
+        # Xử lý hiển thị: Điền 0 vào ô trống
         df_final = df_final.fillna(0)
+        
+        # Đưa cột Views_Gained lên vị trí thứ 5 (sau Link) cho dễ nhìn
         cols = df_final.columns.tolist()
         if 'Views_Gained' in cols:
             cols.insert(4, cols.pop(cols.index('Views_Gained')))
         
+        # Sắp xếp danh sách theo lượt view hôm nay giảm dần
         df_final = df_final[cols].sort_values(by=view_col_today, ascending=False)
+        
+        # Lưu file
         df_final.to_csv(filename, index=False, encoding='utf-8-sig')
-        print(f"✅ Đã lưu file thành công: {filename}")
+        print(f"✅ Đã lưu thành công file: {filename}")
 
 if __name__ == "__main__":
-    # 1. Lấy Key
+    # Lấy API Key
     API_KEY = os.environ.get('API_KEY')
     if not API_KEY:
         API_KEY = os.environ.get('YOUTUBE_API_KEY') 
@@ -113,13 +129,11 @@ if __name__ == "__main__":
         print("❌ LỖI: Không tìm thấy API Key.")
         exit(1)
 
-    # 2. Cấu hình kênh
+    # --- CẬP NHẬT THÔNG TIN CỦA BẠN ---
     CHANNEL_HANDLE = '@stoicether' 
-    
-    # 3. ĐẶT TÊN FILE (QUAN TRỌNG NHẤT - PHẢI NẰM Ở ĐÂY)
-    CSV_FILENAME = f"history_{CHANNEL_HANDLE.replace('@','')}.csv"
-    
-    # 4. Chạy tool
+    CSV_FILENAME = "history_stoicether.csv"
+    # ----------------------------------
+
     tool = YouTubeAnalyticsTool(API_KEY)
     channel_id = tool.get_channel_id_by_handle(CHANNEL_HANDLE)
 
@@ -127,10 +141,8 @@ if __name__ == "__main__":
         uploads_id = tool.get_uploads_playlist_id(channel_id)
         if uploads_id:
             data = tool.get_all_videos_stats(uploads_id)
-            # Lúc này biến CSV_FILENAME đã được tạo ở bước 3 nên sẽ không lỗi nữa
             tool.update_history_csv(data, CSV_FILENAME)
         else:
              print("❌ Không tìm thấy playlist Uploads.")
     else:
         print("❌ Không tìm thấy kênh.")
-
