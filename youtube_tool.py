@@ -64,7 +64,7 @@ class YouTubeAnalyticsTool:
             print("⚠️ Không có dữ liệu.")
             return
 
-        # 1. Xác định tên cột cho ngày hôm nay
+        # Xác định tên cột cho ngày hôm nay
         today_str = datetime.datetime.now().strftime('%Y-%m-%d')
         view_col_today = f'Views_{today_str}'
 
@@ -76,48 +76,58 @@ class YouTubeAnalyticsTool:
             print(f"📂 Đang cập nhật vào file: {filename}")
             df_hist = pd.read_csv(filename)
             
-            # Xóa cột dữ liệu hôm nay nếu đã tồn tại (để tránh trùng lặp khi chạy lại)
+            # Xóa cột dữ liệu hôm nay nếu đã tồn tại (để tránh trùng khi chạy nhiều lần trong ngày)
             if view_col_today in df_hist.columns:
                 df_hist.drop(columns=[view_col_today], inplace=True)
 
-            # Lấy danh sách các cột Views cũ
+            # Lấy danh sách cột Views cũ và sắp xếp tăng dần theo thời gian
             old_view_cols = [col for col in df_hist.columns if col.startswith('Views_') and '-' in col]
-            
-            # QUAN TRỌNG: Sắp xếp các cột theo ngày tăng dần để tìm đúng ngày liền kề
             old_view_cols.sort()
 
-            # Chỉ giữ lại Video ID và các cột Views lịch sử để ghép nối
+            # Ghép nối dữ liệu
             df_hist_views_only = df_hist[['Video ID'] + old_view_cols]
             df_final = pd.merge(df_today, df_hist_views_only, on='Video ID', how='outer')
             
             # Tính toán Views_Gained (Hôm nay - Ngày gần nhất)
             if old_view_cols:
-                last_date_col = old_view_cols[-1] # Lấy cột ngày mới nhất trong quá khứ
-                print(f"📊 Đang tính chênh lệch giữa {view_col_today} và {last_date_col}")
-                
-                # Tính chênh lệch, nếu dữ liệu thiếu thì coi là 0
+                last_date_col = old_view_cols[-1]
                 df_final['Views_Gained'] = df_final[view_col_today].fillna(0) - df_final[last_date_col].fillna(0)
             else:
                 df_final['Views_Gained'] = 0
+                
+            # --- LOGIC MỚI: DỌN DẸP, CHỈ GIỮ 5 NGÀY GẦN NHẤT ---
+            # Gom tất cả các cột ngày tháng hiện có lại (bao gồm cả hôm nay)
+            all_view_cols = [col for col in df_final.columns if col.startswith('Views_') and '-' in col]
+            all_view_cols.sort()
+            
+            # Nếu tổng số cột ngày tháng > 5, ta sẽ xóa bớt những ngày cũ nhất
+            MAX_DAYS_TO_KEEP = 5
+            if len(all_view_cols) > MAX_DAYS_TO_KEEP:
+                # Lấy danh sách các cột cần xóa (từ đầu đến vị trí cách cuối cùng 5 bước)
+                cols_to_remove = all_view_cols[:-MAX_DAYS_TO_KEEP]
+                print(f"🧹 Đang dọn dẹp dữ liệu cũ. Xóa các cột: {', '.join(cols_to_remove)}")
+                df_final.drop(columns=cols_to_remove, inplace=True)
+            # ---------------------------------------------------
+                
         else:
             print(f"🆕 Tạo file mới: {filename}")
             df_final = df_today
             df_final['Views_Gained'] = 0
 
-        # Xử lý hiển thị: Điền 0 vào ô trống
+        # Xử lý hiển thị
         df_final = df_final.fillna(0)
         
-        # Đưa cột Views_Gained lên vị trí thứ 5 (sau Link) cho dễ nhìn
+        # Đưa cột Views_Gained lên vị trí dễ nhìn (sau cột Link)
         cols = df_final.columns.tolist()
         if 'Views_Gained' in cols:
             cols.insert(4, cols.pop(cols.index('Views_Gained')))
         
-        # Sắp xếp danh sách theo lượt view hôm nay giảm dần
+        # Sắp xếp theo view hôm nay giảm dần
         df_final = df_final[cols].sort_values(by=view_col_today, ascending=False)
         
         # Lưu file
         df_final.to_csv(filename, index=False, encoding='utf-8-sig')
-        print(f"✅ Đã lưu thành công file: {filename}")
+        print(f"✅ Đã lưu thành công file (hiển thị tối đa 5 ngày): {filename}")
 
 if __name__ == "__main__":
     # Lấy API Key
@@ -129,10 +139,8 @@ if __name__ == "__main__":
         print("❌ LỖI: Không tìm thấy API Key.")
         exit(1)
 
-    # --- CẬP NHẬT THÔNG TIN CỦA BẠN ---
     CHANNEL_HANDLE = '@stoicether' 
     CSV_FILENAME = "history_stoicether.csv"
-    # ----------------------------------
 
     tool = YouTubeAnalyticsTool(API_KEY)
     channel_id = tool.get_channel_id_by_handle(CHANNEL_HANDLE)
