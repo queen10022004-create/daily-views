@@ -2,8 +2,8 @@ name: YouTube Views Tracker Daily
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Chạy 7h sáng hằng ngày
-  workflow_dispatch:
+    - cron: '0 0 * * *' # Chạy tự động hàng ngày
+  workflow_dispatch: # Cho phép bấm chạy thủ công
 
 permissions:
   contents: write
@@ -31,31 +31,16 @@ jobs:
           API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: python youtube_tool.py
-      - name: 5. Debug & Commit
-        run: |
-          # --- LỆNH KIỂM TRA MỚI ---
-          echo "📂 Đang liệt kê các file trong thư mục hiện tại:"
-          ls -R
-          # -------------------------
 
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          # Thử add file, nếu không có file thì không báo lỗi đỏ lòm nữa mà chỉ báo warning
-          git add *.csv || echo "⚠️ Cảnh báo: Không tìm thấy file CSV nào để add!"
-          
-          # Chỉ commit nếu có sự thay đổi
-          git diff --staged --quiet || git commit -m "📊 Auto-update stats [skip ci]"
-          git push origin main
       - name: Commit & Push Data back to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add *.xlsx
-          git commit -m "📊 Auto-update stats [skip ci]" || echo "No changes to commit"
+          git commit -m "📊 Auto-update Excel stats [skip ci]" || echo "No changes to commit"
           git push origin main
 
-      # --- PHẦN MỚI: GỬI EMAIL ---
+      # --- PHẦN GỬI EMAIL ĐÃ ĐƯỢC CẬP NHẬT ---
       - name: Send mail
         uses: dawidd6/action-send-mail@v3
         with:
@@ -63,15 +48,15 @@ jobs:
           server_port: 465
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          subject: 📊 Báo cáo YouTube Hàng Ngày
+          subject: 📊 Báo cáo YouTube Hàng Ngày (@stoicether)
           body: |
             Chào bạn,
             
-            Đây là báo cáo thống kê lượt xem kênh YouTube của bạn ngày hôm nay.
-            File chi tiết được đính kèm bên dưới.
+            Hệ thống đã cập nhật xong số liệu lượt xem ngày hôm nay cho kênh YouTube của bạn.
+            File Excel (.xlsx) với 2 Sheet thống kê (Tổng quan & Video tăng view) được đính kèm bên dưới.
             
-            Trân trọng,
+            Chúc bạn một ngày làm việc hiệu quả!
             GitHub Bot
-          to: ${{ secrets.MAIL_USERNAME }} # Gửi cho chính mình
+          to: queen10022004@gmail.com # Email nhận báo cáo của bạn
           from: YouTube Tracker Bot
-          attachments: history_*.csv # Tự động tìm file csv để đính kèm
+          attachments: *.xlsx # Tự động đính kèm file Excel
