@@ -59,78 +59,108 @@ class YouTubeAnalyticsTool:
                 break
         return videos_data
 
-    def update_history_csv(self, current_data, filename):
+    def update_history_excel(self, current_data, filename):
         if not current_data:
             print("⚠️ Không có dữ liệu.")
             return
 
-        # Xác định tên cột cho ngày hôm nay
         today_str = datetime.datetime.now().strftime('%Y-%m-%d')
         view_col_today = f'Views_{today_str}'
 
-        # Tạo bảng dữ liệu mới
+        # Tạo DataFrame cho hôm nay
         df_today = pd.DataFrame(current_data)
         df_today.rename(columns={'Views': view_col_today}, inplace=True)
+        df_today[view_col_today] = pd.to_numeric(df_today[view_col_today], errors='coerce').fillna(0)
+
+        df_final = df_today.copy()
+        view_col_yesterday = None
 
         if os.path.exists(filename):
-            print(f"📂 Đang cập nhật vào file: {filename}")
-            df_hist = pd.read_csv(filename)
-            
-            # Xóa cột dữ liệu hôm nay nếu đã tồn tại (để tránh trùng khi chạy nhiều lần trong ngày)
-            if view_col_today in df_hist.columns:
-                df_hist.drop(columns=[view_col_today], inplace=True)
-
-            # Lấy danh sách cột Views cũ và sắp xếp tăng dần theo thời gian
-            old_view_cols = [col for col in df_hist.columns if col.startswith('Views_') and '-' in col]
-            old_view_cols.sort()
-
-            # Ghép nối dữ liệu
-            df_hist_views_only = df_hist[['Video ID'] + old_view_cols]
-            df_final = pd.merge(df_today, df_hist_views_only, on='Video ID', how='outer')
-            
-            # Tính toán Views_Gained (Hôm nay - Ngày gần nhất)
-            if old_view_cols:
-                last_date_col = old_view_cols[-1]
-                df_final['Views_Gained'] = df_final[view_col_today].fillna(0) - df_final[last_date_col].fillna(0)
-            else:
+            print(f"📂 Đang lấy dữ liệu hôm qua từ file: {filename}")
+            try:
+                # Đọc Sheet 1 từ file Excel
+                df_hist = pd.read_excel(filename, sheet_name=0)
+                
+                # Loại bỏ dòng "TOTAL" của lần chạy trước để không bị lỗi tính toán
+                df_hist = df_hist[df_hist['Video ID'] != 'TOTAL']
+                
+                # Tìm cột chứa dữ liệu của ngày gần nhất (trừ ngày hôm nay ra nếu trùng)
+                old_view_cols = [col for col in df_hist.columns if col.startswith('Views_') and '-' in col and col != view_col_today]
+                old_view_cols.sort()
+                
+                if old_view_cols:
+                    view_col_yesterday = old_view_cols[-1]
+                    df_yesterday = df_hist[['Video ID', view_col_yesterday]].copy()
+                    
+                    # Chuyển đổi format chữ (ví dụ '1,234') thành số thực tế để làm toán
+                    df_yesterday[view_col_yesterday] = df_yesterday[view_col_yesterday].astype(str).str.replace(',', '').astype(float)
+                    
+                    # Trộn dữ liệu
+                    df_final = pd.merge(df_today, df_yesterday, on='Video ID', how='outer')
+                    df_final['Views_Gained'] = df_final[view_col_today].fillna(0) - df_final[view_col_yesterday].fillna(0)
+                else:
+                    df_final['Views_Gained'] = 0
+            except Exception as e:
+                print(f"⚠️ Lỗi đọc file cũ: {e}. Hệ thống sẽ tạo lại từ đầu.")
                 df_final['Views_Gained'] = 0
-                
-            # --- LOGIC MỚI: DỌN DẸP, CHỈ GIỮ 5 NGÀY GẦN NHẤT ---
-            # Gom tất cả các cột ngày tháng hiện có lại (bao gồm cả hôm nay)
-            all_view_cols = [col for col in df_final.columns if col.startswith('Views_') and '-' in col]
-            all_view_cols.sort()
-            
-            # Nếu tổng số cột ngày tháng > 5, ta sẽ xóa bớt những ngày cũ nhất
-            MAX_DAYS_TO_KEEP = 5
-            if len(all_view_cols) > MAX_DAYS_TO_KEEP:
-                # Lấy danh sách các cột cần xóa (từ đầu đến vị trí cách cuối cùng 5 bước)
-                cols_to_remove = all_view_cols[:-MAX_DAYS_TO_KEEP]
-                print(f"🧹 Đang dọn dẹp dữ liệu cũ. Xóa các cột: {', '.join(cols_to_remove)}")
-                df_final.drop(columns=cols_to_remove, inplace=True)
-            # ---------------------------------------------------
-                
         else:
-            print(f"🆕 Tạo file mới: {filename}")
-            df_final = df_today
+            print(f"🆕 Tạo file Excel mới: {filename}")
             df_final['Views_Gained'] = 0
 
-        # Xử lý hiển thị
+        # Lấp đầy các ô trống bằng 0
         df_final = df_final.fillna(0)
+
+        # CHỈ GIỮ LẠI: ID, Title, Publish, Link, Gained, Hôm qua, Hôm nay
+        cols = ['Video ID', 'Title', 'Publish Date', 'Link', 'Views_Gained']
+        if view_col_yesterday:
+            cols.append(view_col_yesterday)
+        cols.append(view_col_today)
         
-        # Đưa cột Views_Gained lên vị trí dễ nhìn (sau cột Link)
-        cols = df_final.columns.tolist()
-        if 'Views_Gained' in cols:
-            cols.insert(4, cols.pop(cols.index('Views_Gained')))
-        
-        # Sắp xếp theo view hôm nay giảm dần
+        # Lọc các cột và sắp xếp
         df_final = df_final[cols].sort_values(by=view_col_today, ascending=False)
-        
-        # Lưu file
-        df_final.to_csv(filename, index=False, encoding='utf-8-sig')
-        print(f"✅ Đã lưu thành công file (hiển thị tối đa 5 ngày): {filename}")
+
+        # Sheet 2: Chỉ lấy những video có Views_Gained > 0
+        df_changed = df_final[df_final['Views_Gained'] > 0].copy()
+
+        # Hàm tiện ích: Thêm dòng Tổng Cộng và Format số hàng ngàn
+        def format_and_add_total(df, num_cols):
+            if df.empty:
+                return df
+                
+            total_row = {col: '' for col in df.columns}
+            total_row['Title'] = '🔥 TỔNG CỘNG'
+            total_row['Video ID'] = 'TOTAL'
+            
+            # Tính tổng cho các cột số
+            for col in num_cols:
+                if col in df.columns:
+                    total_row[col] = df[col].sum()
+            
+            # Gắn dòng tổng vào cuối bảng
+            df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
+            
+            # Format số hàng ngàn (thêm dấu phẩy)
+            for col in num_cols:
+                if col in df.columns:
+                    df[col] = df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) and x != '' else x)
+            return df
+
+        # Áp dụng format
+        num_columns_to_format = ['Views_Gained', view_col_today]
+        if view_col_yesterday:
+            num_columns_to_format.append(view_col_yesterday)
+
+        df_sheet1 = format_and_add_total(df_final.copy(), num_columns_to_format)
+        df_sheet2 = format_and_add_total(df_changed.copy(), num_columns_to_format)
+
+        # XUẤT RA EXCEL NHIỀU SHEET
+        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
+            df_sheet1.to_excel(writer, sheet_name='Tat_ca_Video', index=False)
+            df_sheet2.to_excel(writer, sheet_name='Video_Tang_View', index=False)
+            
+        print(f"✅ Đã lưu thành công file Excel (Tự động Format): {filename}")
 
 if __name__ == "__main__":
-    # Lấy API Key
     API_KEY = os.environ.get('API_KEY')
     if not API_KEY:
         API_KEY = os.environ.get('YOUTUBE_API_KEY') 
@@ -140,7 +170,8 @@ if __name__ == "__main__":
         exit(1)
 
     CHANNEL_HANDLE = '@stoicether' 
-    CSV_FILENAME = "history_stoicether.csv"
+    # QUAN TRỌNG: Đã đổi đuôi file thành .xlsx
+    EXCEL_FILENAME = "history_stoicether.xlsx"
 
     tool = YouTubeAnalyticsTool(API_KEY)
     channel_id = tool.get_channel_id_by_handle(CHANNEL_HANDLE)
@@ -149,7 +180,7 @@ if __name__ == "__main__":
         uploads_id = tool.get_uploads_playlist_id(channel_id)
         if uploads_id:
             data = tool.get_all_videos_stats(uploads_id)
-            tool.update_history_csv(data, CSV_FILENAME)
+            tool.update_history_excel(data, EXCEL_FILENAME)
         else:
              print("❌ Không tìm thấy playlist Uploads.")
     else:
