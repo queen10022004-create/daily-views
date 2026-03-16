@@ -2,8 +2,8 @@ name: YouTube Views Tracker Daily
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Chạy tự động hàng ngày
-  workflow_dispatch: # Cho phép bấm chạy thủ công
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -40,7 +40,6 @@ jobs:
           git commit -m "📊 Auto-update Excel stats [skip ci]" || echo "No changes to commit"
           git push origin main
 
-      # --- PHẦN GỬI EMAIL ĐÃ ĐƯỢC CẬP NHẬT ---
       - name: Send mail
         uses: dawidd6/action-send-mail@v3
         with:
@@ -57,6 +56,7 @@ jobs:
             
             Chúc bạn một ngày làm việc hiệu quả!
             GitHub Bot
-          to: queen10022004@gmail.com # Email nhận báo cáo của bạn
+          to: queen10022004@gmail.com
           from: YouTube Tracker Bot
-          attachments: *.xlsx # Tự động đính kèm file Excel
+          # 👇 ĐÃ SỬA LỖI CÚ PHÁP (THÊM DẤU NHÁY ĐƠN) 👇
+          attachments: '*.xlsx'
