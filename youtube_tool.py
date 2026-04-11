@@ -63,29 +63,36 @@ class YouTubeAnalyticsTool:
         df_today = pd.DataFrame(current_data)
         df_today.rename(columns={'Views': col_today}, inplace=True)
 
-        # 1. Quản lý tệp lịch sử (Để lưu trữ lâu dài)
+        # 1. Quản lý tệp lịch sử
         if os.path.exists(hist_file):
             df_hist = pd.read_excel(hist_file)
-            # Loại bỏ dòng tổng cũ
             df_hist = df_hist[df_hist['Video ID'] != 'TOTAL']
-            # Cập nhật hoặc thêm ngày mới
-            if col_today in df_hist.columns: df_hist.drop(columns=[col_today], inplace=True)
-            df_combined = pd.merge(df_today, df_hist[['Video ID'] + [c for c in df_hist.columns if 'Views_' in c]], on='Video ID', how='left')
+            
+            # --- BẢN VÁ LỖI: Dọn dẹp tệp lịch sử cũ ---
+            if 'Views_Gained' in df_hist.columns:
+                df_hist.drop(columns=['Views_Gained'], inplace=True)
+            # ------------------------------------------
+            
+            if col_today in df_hist.columns: 
+                df_hist.drop(columns=[col_today], inplace=True)
+                
+            # Ép điều kiện ngày tháng chặt chẽ hơn (phải có chữ 'Views_' VÀ có dấu '-')
+            valid_history_cols = [c for c in df_hist.columns if c.startswith('Views_') and '-' in c]
+            df_combined = pd.merge(df_today, df_hist[['Video ID'] + valid_history_cols], on='Video ID', how='left')
         else:
             df_combined = df_today.copy()
 
-        # Lưu lại file lịch sử gốc (giữ tối đa 10 cột để làm kho dữ liệu)
-        view_cols = sorted([c for c in df_combined.columns if 'Views_' in c])
-        if len(view_cols) > 10: df_combined.drop(columns=view_cols[:-10], inplace=True)
+        # Lưu lại file lịch sử gốc (giữ tối đa 10 cột)
+        view_cols = sorted([c for c in df_combined.columns if c.startswith('Views_') and '-' in c])
+        if len(view_cols) > 10: 
+            df_combined.drop(columns=view_cols[:-10], inplace=True)
         df_combined.to_excel(hist_file, index=False)
 
-        # 2. Tạo báo cáo gửi Email (Chỉ gồm 2 ngày liền kề)
-        # Kiểm tra xem có dữ liệu ngày hôm qua không
+        # 2. Tạo báo cáo gửi Email
         if col_yesterday in df_combined.columns:
             prev_data_col = col_yesterday
         else:
-            # Nếu không có hôm qua, lấy ngày gần nhất có thể nhưng cảnh báo
-            existing_dates = [c for c in df_combined.columns if 'Views_' in c and c != col_today]
+            existing_dates = [c for c in df_combined.columns if c.startswith('Views_') and '-' in c and c != col_today]
             prev_data_col = sorted(existing_dates)[-1] if existing_dates else None
 
         df_report = df_today.copy()
@@ -100,8 +107,7 @@ class YouTubeAnalyticsTool:
         # Lọc: Chỉ lấy video có views tăng
         df_report = df_report[df_report['Views_Gained'] > 0].copy()
 
-        # Sắp xếp cột theo thứ tự A->G của bạn
-        # A: ID, B: Title, C: Link, D: Publish, E: Gained, F: Yesterday, G: Today
+        # Cấu trúc cột xuất ra
         final_cols = ['Video ID', 'Title', 'Link', 'Publish Date', 'Views_Gained', prev_data_col, col_today]
         df_report = df_report[final_cols].sort_values(by='Views_Gained', ascending=False)
 
@@ -115,7 +121,6 @@ class YouTubeAnalyticsTool:
                     if c in df.columns: total_row[c] = df[c].sum()
                 df = pd.concat([df, pd.DataFrame([total_row])], ignore_index=True)
                 
-                # Format dấu phẩy hàng ngàn
                 for c in num_cols:
                     if c in df.columns:
                         df[c] = df[c].apply(lambda x: f"{int(x):,}" if isinstance(x, (int, float)) else x)
