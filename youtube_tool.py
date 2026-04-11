@@ -45,7 +45,7 @@ class YouTubeAnalyticsTool:
                     videos_data.append({
                         'Video ID': item['id'],
                         'Title': snippet['title'],
-                        'Publish Date': snippet['publishedAt'][:10], # Lấy yyyy-mm-dd
+                        'Publish Date': snippet['publishedAt'][:10],
                         'Link': f"https://www.youtube.com/watch?v={item['id']}",
                         'Views': int(stats.get('viewCount', 0))
                     })
@@ -62,22 +62,28 @@ class YouTubeAnalyticsTool:
 
         df_today = pd.DataFrame(current_data)
         df_today.rename(columns={'Views': col_today}, inplace=True)
+        # BẢO VỆ: Ép kiểu dữ liệu hôm nay về số nguyên ngay từ đầu
+        df_today[col_today] = pd.to_numeric(df_today[col_today], errors='coerce').fillna(0).astype(int)
 
         # 1. Quản lý tệp lịch sử
         if os.path.exists(hist_file):
             df_hist = pd.read_excel(hist_file)
             df_hist = df_hist[df_hist['Video ID'] != 'TOTAL']
             
-            # --- BẢN VÁ LỖI: Dọn dẹp tệp lịch sử cũ ---
             if 'Views_Gained' in df_hist.columns:
                 df_hist.drop(columns=['Views_Gained'], inplace=True)
-            # ------------------------------------------
-            
             if col_today in df_hist.columns: 
                 df_hist.drop(columns=[col_today], inplace=True)
                 
-            # Ép điều kiện ngày tháng chặt chẽ hơn (phải có chữ 'Views_' VÀ có dấu '-')
             valid_history_cols = [c for c in df_hist.columns if c.startswith('Views_') and '-' in c]
+            
+            # --- BẢN VÁ LỖI TOÁN HỌC: CHUẨN HÓA DỮ LIỆU CŨ ---
+            # Xóa mọi dấu phẩy và ép tất cả dữ liệu lịch sử về dạng số nguyên (int)
+            for col in valid_history_cols:
+                df_hist[col] = df_hist[col].astype(str).str.replace(',', '', regex=False)
+                df_hist[col] = pd.to_numeric(df_hist[col], errors='coerce').fillna(0).astype(int)
+            # ------------------------------------------------
+            
             df_combined = pd.merge(df_today, df_hist[['Video ID'] + valid_history_cols], on='Video ID', how='left')
         else:
             df_combined = df_today.copy()
@@ -97,7 +103,8 @@ class YouTubeAnalyticsTool:
 
         df_report = df_today.copy()
         if prev_data_col:
-            df_report[prev_data_col] = df_combined[prev_data_col].fillna(0)
+            # Đảm bảo trước khi trừ, cột hôm qua chắn chắn là dạng số nguyên
+            df_report[prev_data_col] = pd.to_numeric(df_combined[prev_data_col], errors='coerce').fillna(0).astype(int)
             df_report['Views_Gained'] = df_report[col_today] - df_report[prev_data_col]
         else:
             df_report['Views_Gained'] = 0
@@ -144,6 +151,7 @@ if __name__ == "__main__":
     
     if channel_id:
         u_id = tool.get_uploads_playlist_id(channel_id)
-        data = tool.get_all_videos_stats(u_id)
-        # Xuất 2 tệp: 1 để bot lưu lịch sử, 1 để gửi email
-        tool.generate_strict_report(data, "history_stoicether.xlsx", "report_views_increased.xlsx")
+        if u_id:
+            data = tool.get_all_videos_stats(u_id)
+            tool.generate_strict_report(data, "history_stoicether.xlsx", "report_views_increased.xlsx")
+        else: print("Không lấy được playlist uploads")
